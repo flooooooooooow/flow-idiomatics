@@ -54,6 +54,9 @@ jobs:
       - name: Run closed-loop evolution showcase
         run: FLOW_HOST=python .flow-toolchain/flow run showcases/evolution/closed_loop_motor.flow
 
+      - name: Run hybrid evolution showcase
+        run: FLOW_HOST=python .flow-toolchain/flow run showcases/evolution/hybrid_bounce.flow
+
       - name: Run maximal evolving/effectful system
         run: FLOW_HOST=python .flow-toolchain/flow run maximal/evolving_effectful_system.flow
 
