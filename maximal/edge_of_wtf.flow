@@ -1,0 +1,186 @@
+# EDGE OF WTF
+#
+# This file intentionally combines a large set of C-target Flow features in one
+# coherent program: owned fixed arrays, borrowed spans, mutable spans, static
+# extents, zero-copy slices, higher-order functions, escaping closures with
+# captured state, value-producing if, guarded/alternating match arms, explicit
+# pointers, defer, algebraic effects, capabilities, handler composition and a
+# nested dynamic override.
+#
+# It is not beginner code. It is the point where "Flow syntax" becomes an
+# architectural statement rather than surface sugar.
+#
+# Expected host/backend: Python-hosted compiler -> C.
+
+extern {
+    function calloc(count: i64, size: i64) -> ptr<void>
+    function free(p: ptr<void>) -> void
+    function printf(fmt: string, ...) -> i32
+}
+
+effect Trace {
+    write(message: string) -> void,
+}
+
+effect Gate {
+    threshold() -> i32,
+    bias() -> i32,
+}
+
+capability ProductionWorld {
+    effect Trace, Gate,
+
+    function write(message: string) -> void {
+        printf("[prod] %s\n", message)
+    },
+
+    function threshold() -> i32 {
+        return 50
+    },
+
+    function bias() -> i32 {
+        return 3
+    },
+}
+
+capability ConservativeGate {
+    effect Gate,
+
+    function threshold() -> i32 {
+        return 100
+    },
+
+    function bias() -> i32 {
+        return -5
+    },
+}
+
+capability SilentTrace {
+    effect Trace,
+
+    function write(message: string) -> void {
+    },
+}
+
+function energy(samples: span<f32>) -> f32 {
+    let mut total: f32 = 0.0
+    let mut i: i32 = 0
+    while i < samples.len {
+        total = total + samples[i] * samples[i]
+        i = i + 1
+    }
+    return total
+}
+
+function center(samples: span<mut f32>, offset: f32) -> void {
+    let mut i: i32 = 0
+    while i < samples.len {
+        samples[i] = samples[i] - offset
+        i = i + 1
+    }
+}
+
+function edge_sum4(samples: span<f32, 4>) -> f32 {
+    return samples[0] + samples[3]
+}
+
+function apply_score(f: (f32) -> i32, value: f32) -> i32 {
+    return f(value)
+}
+
+function make_score(gain: i32) -> (f32) -> i32 {
+    return |value: f32| -> i32 {
+        return (value as i32) * gain
+    }
+}
+
+function severity(score: i32) -> i32 {
+    match score {
+        0 => { return 0 }
+        1 | 2 | 3 => { return 1 }
+        x if x < 50 => { return 2 }
+        _ => { return 3 }
+    }
+}
+
+function decide(frame: span<f32>, scorer: (f32) -> i32) -> i32 {
+    let raw: i32 = apply_score(scorer, energy(frame))
+    let adjusted: i32 = raw + Gate.bias()
+    let level: i32 = severity(adjusted)
+    let accepted: i32 = if adjusted >= Gate.threshold() { 1 } else { 0 }
+
+    if accepted == 1 {
+        Trace.write("accepted")
+    } else {
+        Trace.write("rejected")
+    }
+
+    # Keep the classification alive in the dataflow so this is not a decorative
+    # match expression.
+    return accepted * 10 + level
+}
+
+function main() -> i32 {
+    # Explicit heap ownership with guaranteed scope cleanup.
+    let scratch: ptr<i32> = calloc(4, 4)
+    if scratch == null {
+        return 1
+    }
+    defer free(scratch)
+
+    for i in 0 to 4 {
+        scratch[i] = i * i
+    }
+
+    # Fixed owned storage. No heap allocation is needed for the signal itself.
+    let mut frame: array<f32, 8> = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+
+    # Mutable zero-copy slice: only the first half is modified.
+    center(frame[0..4], 2.5)
+
+    # Static-extent borrow proves this view has exactly four elements.
+    let edges: f32 = edge_sum4(frame[0..4])
+    if edges != 0.0 {
+        return 2
+    }
+
+    # Escaping closure captures gain by value.
+    let scorer: (f32) -> i32 = make_score(2)
+
+    let mut live: i32 = 0
+    let mut conservative: i32 = 0
+
+    handle Trace, Gate with ProductionWorld {
+        live = decide(frame[0..4], scorer)
+
+        # Replace policy for exactly one lexical region. Trace remains the same.
+        handle Gate with ConservativeGate {
+            conservative = decide(frame[0..4], scorer)
+        }
+
+        # Replace observability independently of policy.
+        handle Trace with SilentTrace {
+            let quiet: i32 = decide(frame[0..4], scorer)
+            if quiet != live {
+                return 3
+            }
+        }
+    }
+
+    # Centered first half is [-1.5, -0.5, 0.5, 1.5]. Energy = 5.0.
+    # scorer => 10, production bias => 13: reject, severity 2 => 2.
+    if live != 2 {
+        return 4
+    }
+
+    # Conservative bias => 5, also reject, severity 2 => 2.
+    if conservative != 2 {
+        return 5
+    }
+
+    if scratch[3] != 9 {
+        return 6
+    }
+
+    return 0
+}
