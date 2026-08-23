@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: 6151c45768be3de653a48aaa37e671ffe9171e28
+          ref: e8931087a5215750cdaa7553889f9e063787c93b
           path: .flow-toolchain
 
       - name: Set up Python
