@@ -40,4 +40,4 @@ The default is portability. A missing lowering for otherwise general Flow syntax
 
 ## CI is the claim
 
-The authoritative portable corpus is the program list in `.github/workflows/ci.yml`. Every entry is executed through C and independently lowered and verified through MLIR. If either lane is red, the repository must not describe that entry as dual-backend portable.
+`portable-programs.txt` is the authoritative portable corpus. CI reads that one manifest for both backend lanes: every listed program is executed through C/native and independently lowered to MLIR accepted by `mlir-opt`. If either lane is red, the repository must not describe that entry as dual-backend portable.
