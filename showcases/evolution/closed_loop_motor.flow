@@ -1,0 +1,63 @@
+# The model is the program: a continuous plant, a sampled controller and a
+# state-broken feedback connection in one source file.
+#
+# Expected host: Python-hosted Flow compiler.
+
+extern {
+    function printf(fmt: string, val: f64) -> i32
+    function fabs(x: f64) -> f64
+}
+
+flow Motor {
+    state speed: f64 = 0.0
+    input voltage: f64
+    output measured_speed: f64 = speed
+    param damping: f64 = 0.5
+
+    speed evolves as voltage - damping * speed
+}
+
+flow Controller {
+    state command: f64 = 0.0
+    input setpoint: f64
+    input feedback: f64
+    output voltage: f64 = command
+    param kp: f64 = 2.0
+
+    every 1 ms {
+        command becomes kp * (setpoint - feedback)
+    }
+}
+
+flow ClosedLoopMotor {
+    plant: Motor
+    controller: Controller
+
+    connect {
+        controller.voltage -> plant.voltage
+        plant.measured_speed -> controller.feedback
+    }
+}
+
+function main() -> i32 {
+    let dt: f64 = 0.001
+    let steps: i32 = 5000
+    let target: f64 = 1.0
+    let mut system: ClosedLoopMotor = ClosedLoopMotor_new()
+
+    system.controller.setpoint = target
+
+    for k in 0 to steps {
+        ClosedLoopMotor_step(&system, dt)
+    }
+
+    let error: f64 = fabs(system.plant.speed - target)
+    printf("speed=%f\n", system.plant.speed)
+    printf("command=%f\n", system.controller.command)
+    printf("error=%f\n", error)
+
+    if error < 0.05 {
+        return 0
+    }
+    return 1
+}
