@@ -1,0 +1,113 @@
+# ADAPTIVE DECLARATIVE PIPELINE
+#
+# One source value is forked into several derived facts, an enum selects the
+# topology of a later pipeline, ordinary match logic classifies the result, and
+# an algebraic effect controls observation of the whole computation.
+#
+# Expected host/backend: Python-hosted compiler -> C.
+
+extern {
+    function printf(fmt: string, val: i32) -> i32
+}
+
+effect Trace {
+    value(x: i32) -> void,
+}
+
+capability ConsoleTrace {
+    effect Trace,
+
+    function value(x: i32) -> void {
+        printf("trace=%d\n", x)
+    },
+}
+
+capability SilentTrace {
+    effect Trace,
+
+    function value(x: i32) -> void {
+    },
+}
+
+struct Stats {
+    doubled: i32,
+    squared: i32,
+    plus_ten: i32,
+}
+
+enum Mode { Double, Triple }
+
+function twice(x: i32) -> i32 { return x * 2 }
+function triple(x: i32) -> i32 { return x * 3 }
+function square(x: i32) -> i32 { return x * x }
+function add(x: i32, k: i32) -> i32 { return x + k }
+
+function observed(x: i32) -> i32 {
+    Trace.value(x)
+    return x
+}
+
+function classify(x: i32) -> i32 {
+    match x {
+        0 => { return 0 }
+        1 | 2 | 3 => { return 1 }
+        n if n < 100 => { return 2 }
+        _ => { return 3 }
+    }
+}
+
+function route(mode: Mode, x: i32) -> i32 {
+    return x
+        |> choose mode.tag {
+            Mode_Double => twice,
+            Mode_Triple => triple,
+        }
+        |> observed
+}
+
+function analyze(mode: Mode, source: i32) -> i32 {
+    # The source is evaluated once and shared by all three branches.
+    let stats: Stats = source |> Stats {
+        doubled = twice,
+        squared = square,
+        plus_ten = add(_, 10),
+    }
+
+    let routed: i32 = route(mode, stats.plus_ten)
+    let class: i32 = classify(stats.squared)
+    return routed + stats.doubled + class
+}
+
+function main() -> i32 {
+    let double_mode: Mode = Mode { tag: Mode_Double }
+    let triple_mode: Mode = Mode { tag: Mode_Triple }
+
+    let mut visible: i32 = 0
+    let mut quiet: i32 = 0
+    let mut alternate: i32 = 0
+
+    handle Trace with ConsoleTrace {
+        visible = analyze(double_mode, 6)
+
+        handle Trace with SilentTrace {
+            quiet = analyze(double_mode, 6)
+        }
+
+        alternate = analyze(triple_mode, 6)
+    }
+
+    # source=6 => doubled=12, squared=36, plus_ten=16, class=2
+    # double mode => 32 + 12 + 2 = 46
+    if visible != 46 {
+        return 1
+    }
+    if quiet != 46 {
+        return 2
+    }
+
+    # triple mode => 48 + 12 + 2 = 62
+    if alternate != 62 {
+        return 3
+    }
+    return 0
+}

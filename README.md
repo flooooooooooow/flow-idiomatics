@@ -10,7 +10,7 @@ Flow is most interesting at the point where ordinary syntax would usually collap
 
 The programs here are intentionally close to the **maximum useful WTF density** of the language: dense enough to expose Flow's unusual abstractions, but still written the way a serious Flow program should be written. The goal is not code golf. The goal is to make difficult systems look like the systems they describe.
 
-Flow 1.0.0 deliberately keeps a small Stable production core. Several of the features showcased here — algebraic effects, dynamics/control DSLs, declarative planning, advanced concurrency, GPU surfaces and autodiff — are currently Experimental in the main Flow repository. This repo treats that status as a constraint, not an excuse to blur reality. Every showcase states its required host/backend, and the CI is intended to compile or run the examples against current Flow rather than blessing invented syntax.
+Flow 1.0.0 deliberately keeps a small Stable production core. Several of the features showcased here — algebraic effects, dynamics/control DSLs, declarative planning, advanced concurrency, GPU surfaces and autodiff — are currently Experimental in the main Flow repository. This repo treats that status as a constraint, not an excuse to blur reality. Every showcase states its required host/backend, and CI runs the programs against current Flow rather than blessing invented syntax.
 
 ## What belongs here
 
@@ -24,7 +24,7 @@ Flow 1.0.0 deliberately keeps a small Stable production core. Several of the fea
 
 ## The standard
 
-A showcase should earn its complexity. A program qualifies when it demonstrates at least one of the following: behaviour selected by scoped capabilities instead of parameter plumbing; a dynamical model that is also executable deployment code; borrowed memory without ownership noise; declarative ordering/search where the compiler owns plan selection; pattern matching that removes state-machine scaffolding; real-time or systems constraints expressed in the program rather than comments; or several of those properties interacting in one coherent design.
+A showcase should earn its complexity. A program qualifies when it demonstrates behaviour selected by scoped capabilities instead of parameter plumbing, a dynamical model that is also executable deployment code, borrowed memory without ownership noise, declarative computation topology, hybrid continuous/discrete evolution, pattern matching that removes state-machine scaffolding, low-level lifetime control, or several of those properties interacting in one coherent design.
 
 A maximal program has a stricter standard. It must combine multiple advanced language surfaces without becoming a feature checklist. If removing a feature makes the architecture clearer, that feature did not belong there.
 
@@ -36,29 +36,41 @@ That distinction matters. A 40-line Flow program is not automatically better tha
 
 ## Current showcase map
 
-The first set is organised around four pressure tests.
+| Program | Pressure test |
+|---|---|
+| `showcases/effects/packet_admission_worlds.flow` | One admission algorithm under live, panic and deterministic worlds; multi-effect capabilities; composed handlers; nested dynamic replacement. |
+| `showcases/memory/borrowed_signal.flow` | Fixed ownership, immutable and mutable spans, static extents, zero-copy slices, value-producing conditionals and guarded matching. |
+| `showcases/evolution/closed_loop_motor.flow` | Continuous plant, sampled controller and state-broken feedback network using generated evolution APIs and `connect`. |
+| `showcases/evolution/hybrid_bounce.flow` | RK4 continuous evolution plus a discrete `when ... reaches` reset in one hybrid model. |
+| `maximal/edge_of_wtf.flow` | Spans, explicit heap ownership, `defer`, closures, higher-order calls, matching, value-producing `if`, effects and nested handler replacement in one C-target program. |
+| `maximal/adaptive_pipeline.flow` | Named fork records, placeholder pipelines, `choose`, enums, guarded matching and scoped observation in one dataflow. |
+| `maximal/evolving_effectful_system.flow` | Continuous dynamics, sampled control, nested flow topology, generated stepping, effects, handler replacement and classification in one executable system. |
 
-`showcases/effects/order_worlds.flow` demonstrates one body of business logic executing under production, deterministic-test, partially mocked and dynamically overridden worlds with algebraic effects and capabilities.
+The maximal directory is intentionally plural. There is no honest “all features at once” file because Flow's current advanced surfaces have different host/backend boundaries. A Metal `@gpu` kernel, a Python-host-expanded declarative pipeline, a native pthread program and a portable core-only program are not the same compilation contract. The useful challenge is to combine everything that coherently belongs on one target, not to make a fake syntax trophy.
 
-`showcases/evolution/robot_connect.flow` demonstrates an executable continuous plant, sampled controller and state-broken feedback network using Flow's evolution model and `connect` syntax.
+## Cross-language comparisons
 
-`showcases/memory/borrowed_signal.flow` demonstrates fixed owned storage, read-only spans, mutable spans, static extents and zero-copy slicing without turning the API into raw-pointer soup.
+`comparisons/README.md` contains direct architectural comparisons for scoped effects versus Rust trait plumbing, temporary handler overrides versus mutable application configuration, spans versus C pointer/count APIs and C++20 `std::span`, continuous plant/controller systems versus Python/SciPy orchestration, hybrid event resets versus manual integration loops, pattern matching versus branch accumulation, `defer` versus mirrored cleanup paths, and declarative sort/search versus explicitly selected library algorithms.
 
-`maximal/edge_of_wtf.flow` is the deliberate collision test: borrowed data, closures, value-producing conditionals, pattern matching, scoped effects, nested handler replacement and explicit cleanup in a single C-target program. It is not intended as a beginner tutorial.
+The comparisons are not scored by token count. They ask whether missing lines were ceremony or semantics.
 
-The comparison documents explain why these shapes matter rather than merely showing shorter syntax.
+## Do and don't
+
+`STYLE.md` is the opinionated half of the repository. It shows why ordinary mutable state should remain ordinary data, why environmental behaviour belongs in effects, why `span<mut T>` should communicate actual mutation, why `flow` should represent real evolution rather than replace every numerical loop, why sampling periods should not hide in counter arithmetic, why `connect` should expose topology, why cleanup should bind to scope, and why examples must not invent future Flow syntax.
 
 ## Performance policy
 
 This repository does not publish decorative benchmark numbers.
 
-A performance claim must identify the Flow revision, compiler host, backend, C compiler and flags, machine/runner, workload, warm-up policy, sample count, validation check and comparison implementation. Benchmarks must verify outputs before timing them. If a Flow program is shorter but slower, the result stays. If a comparison language is faster, the result stays. If an optimisation only works because the benchmark changed semantics, it does not count.
+A performance claim must identify the Flow revision, compiler host, backend, compiler flags, runner, workload, warm-up policy, sample count, validation check and comparison implementation. Benchmarks verify outputs before timing results are emitted. If Flow is shorter but slower, the result stays. If C++ or Rust is faster, the result stays. If an optimisation changes semantics, it does not count.
 
-The benchmark harness under `benchmarks/` is the source of truth. README prose may summarize generated results, but hard-coded aspirational speedups are not accepted.
+The first benchmark under `benchmarks/numeric_kernel/` runs the same 20,000,000-step ordered `f64` recurrence in Flow-generated C, C++20, Rust and CPython. `benchmarks/run.py` transpiles Flow, compiles native implementations, performs an untimed warm-up, takes repeated wall-clock samples, validates numerical equivalence and generates a Markdown result table. CI publishes that table into the Actions job summary with the exact Flow revision.
+
+The benchmark harness is the source of truth. README prose may summarize generated results later, but hard-coded aspirational speedups are not accepted.
 
 ## What this repo is trying to prove
 
-Flow's syntax is not unique because it has a nicer `for` loop. It is unique when the same language can describe memory topology, scoped behaviour, continuous evolution, sampled state changes, declarative data movement and low-level execution without forcing the programmer to mentally translate the system through five different programming models.
+Flow's syntax is not unique because it has a nicer `for` loop. It is unique when the same language can describe memory topology, scoped behaviour, continuous evolution, sampled state changes, hybrid events, declarative data movement and low-level execution without forcing the programmer to mentally translate the system through five different programming models.
 
 The best file in this repository should produce the reaction:
 

@@ -1,0 +1,51 @@
+# A hybrid system in which continuous equations and a discrete reset are both
+# first-class model syntax.
+#
+# Expected host/backend: Python-hosted compiler -> C.
+
+extern {
+    function printf(fmt: string, ...) -> i32
+}
+
+flow Ball {
+    state height: f64 = 2.0
+    state velocity: f64 = 0.0
+    param gravity: f64 = 9.81
+    param restitution: f64 = 0.8
+
+    solver { dt 100 us  method rk4 }
+
+    height evolves as velocity
+    velocity evolves as -gravity
+
+    when height reaches 0.0 {
+        velocity becomes -restitution * velocity
+        height becomes 0.0
+    }
+}
+
+function main() -> i32 {
+    let dt: f64 = 0.0001
+    let mut ball: Ball = Ball_new()
+    let mut impacts: i32 = 0
+    let mut previous_velocity: f64 = 0.0
+
+    for step in 0 to 50000 {
+        Ball_step(&ball, dt)
+
+        if previous_velocity < 0.0 and ball.velocity > 0.0 {
+            impacts = impacts + 1
+        }
+        previous_velocity = ball.velocity
+    }
+
+    printf("impacts=%d height=%.6f velocity=%.6f\n", impacts, ball.height, ball.velocity)
+
+    if impacts < 2 {
+        return 1
+    }
+    if ball.height < 0.0 {
+        return 2
+    }
+    return 0
+}

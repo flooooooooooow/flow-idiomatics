@@ -1,0 +1,21 @@
+extern {
+    function printf(fmt: string, ...) -> i32
+}
+
+function run_kernel(iterations: i32) -> f64 {
+    let mut x: f64 = 0.5
+    let mut y: f64 = 1.25
+
+    for i in 0 to iterations {
+        x = x * 1.0000001 + y * 0.0000003
+        y = y * 0.9999999 + x * 0.0000002
+    }
+
+    return x + y
+}
+
+function main() -> i32 {
+    let result: f64 = run_kernel(20000000)
+    printf("%.12f\n", result)
+    return 0
+}

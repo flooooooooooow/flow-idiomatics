@@ -1,0 +1,182 @@
+# One admission algorithm, several operational worlds.
+#
+# The point is not "dependency injection with nicer syntax". The point is that
+# policy selection, observability, audit behaviour and time can be replaced for
+# a dynamic scope without contaminating the admission function's data model.
+#
+# Expected target: Python-hosted Flow compiler -> C backend.
+
+effect Log {
+    info(msg: string) -> void,
+    warn(msg: string) -> void,
+}
+
+effect Clock {
+    now() -> i32,
+}
+
+effect AdmissionPolicy {
+    score(bytes: i32, priority: i32, pressure: i32) -> i32,
+    threshold() -> i32,
+}
+
+effect Audit {
+    accepted(packet_id: i32, score: i32) -> void,
+    rejected(packet_id: i32, score: i32) -> void,
+}
+
+function admit(packet_id: i32, bytes: i32, priority: i32, pressure: i32) -> i32 {
+    Log.info("evaluating packet")
+    let s: i32 = AdmissionPolicy.score(bytes, priority, pressure)
+    let limit: i32 = AdmissionPolicy.threshold()
+
+    if s >= limit {
+        Audit.accepted(packet_id, s)
+        Log.info("packet accepted")
+        return 1
+    }
+
+    Audit.rejected(packet_id, s)
+    Log.warn("packet rejected")
+    return 0
+}
+
+capability WallClock {
+    effect Clock,
+
+    function now() -> i32 {
+        return 1721224800
+    },
+}
+
+capability FrozenClock {
+    effect Clock,
+
+    function now() -> i32 {
+        return 0
+    },
+}
+
+capability TimestampedLog {
+    effect Log,
+
+    function info(msg: string) -> void {
+        let t: i32 = Clock.now()
+        printf("[%d] INFO  %s\n", t, msg)
+    },
+
+    function warn(msg: string) -> void {
+        let t: i32 = Clock.now()
+        printf("[%d] WARN  %s\n", t, msg)
+    },
+}
+
+capability SilentLog {
+    effect Log,
+
+    function info(msg: string) -> void {
+    },
+
+    function warn(msg: string) -> void {
+    },
+}
+
+capability LivePolicy {
+    effect AdmissionPolicy,
+
+    function score(bytes: i32, priority: i32, pressure: i32) -> i32 {
+        return priority * 20 - bytes / 64 - pressure * 3
+    },
+
+    function threshold() -> i32 {
+        return 10
+    },
+}
+
+capability PanicPolicy {
+    effect AdmissionPolicy,
+
+    function score(bytes: i32, priority: i32, pressure: i32) -> i32 {
+        return priority * 8 - bytes / 16 - pressure * 10
+    },
+
+    function threshold() -> i32 {
+        return 30
+    },
+}
+
+capability DeterministicTestWorld {
+    effect AdmissionPolicy, Audit,
+
+    function score(bytes: i32, priority: i32, pressure: i32) -> i32 {
+        return priority * 100
+    },
+
+    function threshold() -> i32 {
+        return 100
+    },
+
+    function accepted(packet_id: i32, score: i32) -> void {
+        printf("captured accept id=%d score=%d\n", packet_id, score)
+    },
+
+    function rejected(packet_id: i32, score: i32) -> void {
+        printf("captured reject id=%d score=%d\n", packet_id, score)
+    },
+}
+
+capability ConsoleAudit {
+    effect Audit,
+
+    function accepted(packet_id: i32, score: i32) -> void {
+        printf("AUDIT accept id=%d score=%d\n", packet_id, score)
+    },
+
+    function rejected(packet_id: i32, score: i32) -> void {
+        printf("AUDIT reject id=%d score=%d\n", packet_id, score)
+    },
+}
+
+function main() -> i32 {
+    let mut normal: i32 = 0
+    let mut panic: i32 = 0
+    let mut fixture_result: i32 = 0
+
+    handle Clock with WallClock {
+        handle Log with TimestampedLog {
+            handle AdmissionPolicy with LivePolicy {
+                handle Audit with ConsoleAudit {
+                    normal = admit(7, 512, 4, 2)
+
+                    # One lexical region changes policy only.
+                    handle AdmissionPolicy with PanicPolicy {
+                        panic = admit(8, 512, 4, 2)
+                    }
+
+                    # The live policy is automatically restored here.
+                    Log.info("live policy restored")
+                }
+            }
+        }
+    }
+
+    # Same admission function, deterministic world, frozen time, silent logs.
+    handle Clock with FrozenClock {
+        handle Log with SilentLog {
+            handle AdmissionPolicy, Audit with DeterministicTestWorld {
+                fixture_result = admit(9, 4096, 1, 99)
+            }
+        }
+    }
+
+    if normal != 1 {
+        return 1
+    }
+    if panic != 0 {
+        return 2
+    }
+    if fixture_result != 1 {
+        return 3
+    }
+    return 0
+}
