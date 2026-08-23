@@ -23,9 +23,12 @@ flow Controller {
     input feedback: f64
     output voltage: f64 = command
     param kp: f64 = 2.0
+    param plant_damping: f64 = 0.5
 
     every 1 ms {
-        command becomes kp * (setpoint - feedback)
+        # Model-based feed-forward cancels the known steady-state damping term;
+        # proportional feedback then handles the transient/error correction.
+        command becomes plant_damping * setpoint + kp * (setpoint - feedback)
     }
 }
 
