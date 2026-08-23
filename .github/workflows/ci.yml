@@ -27,7 +27,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: 3712e900cc2c08e376c412bca526d0982c1c7fe0
           path: .flow-toolchain
 
       - name: Set up Python
@@ -67,7 +66,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: 3712e900cc2c08e376c412bca526d0982c1c7fe0
           path: .flow-toolchain
 
       - name: Set up Python
@@ -118,7 +116,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: 3712e900cc2c08e376c412bca526d0982c1c7fe0
           path: .flow-toolchain
 
       - name: Set up Python
