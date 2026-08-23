@@ -24,9 +24,15 @@ Flow 1.0.0 deliberately keeps a small Stable production core. Several of the fea
 
 ## The standard
 
-A showcase should earn its complexity. A program qualifies when it demonstrates behaviour selected by scoped capabilities instead of parameter plumbing, a dynamical model that is also executable deployment code, borrowed memory without ownership noise, declarative computation topology, hybrid continuous/discrete evolution, pattern matching that removes state-machine scaffolding, low-level lifetime control, or several of those properties interacting in one coherent design.
+A showcase should earn its complexity. A program qualifies when it demonstrates behaviour selected by scoped capabilities instead of parameter plumbing, a dynamical model that is also executable deployment code, borrowed memory without ownership noise, declarative computation topology, hybrid continuous/discrete evolution, pattern matching that removes state-machine scaffolding, low-level lifetime control, higher-order composition that replaces callback scaffolding, or several of those properties interacting in one coherent design.
 
 A maximal program has a stricter standard. It must combine multiple advanced language surfaces without becoming a feature checklist. If removing a feature makes the architecture clearer, that feature did not belong there.
+
+## Portable means two backends
+
+A file listed in `portable-programs.txt` has a mechanical contract, not a marketing label. CI must execute that exact source through Flow's C/native backend and independently lower it through the MLIR backend. The emitted MLIR must be non-empty and accepted by LLVM's `mlir-opt`.
+
+That distinction matters because successful code generation is weaker than valid intermediate representation. The portable corpus is deliberately adversarial: when it exposes a backend gap, the compiler is fixed rather than the showcase being simplified. `portable-programs.txt` is the single source of truth for both lanes.
 
 ## The three kinds of complexity
 
@@ -42,11 +48,18 @@ That distinction matters. A 40-line Flow program is not automatically better tha
 | `showcases/memory/borrowed_signal.flow` | Fixed ownership, immutable and mutable spans, static extents, zero-copy slices, value-producing conditionals and guarded matching. |
 | `showcases/evolution/closed_loop_motor.flow` | Continuous plant, sampled controller and state-broken feedback network using generated evolution APIs and `connect`. |
 | `showcases/evolution/hybrid_bounce.flow` | RK4 continuous evolution plus a discrete `when ... reaches` reset in one hybrid model. |
-| `maximal/edge_of_wtf.flow` | Spans, explicit heap ownership, `defer`, closures, higher-order calls, matching, value-producing `if`, effects and nested handler replacement in one C-target program. |
+| `maximal/edge_of_wtf.flow` | Spans, explicit heap ownership, `defer`, escaping closures, higher-order calls, matching, value-producing `if`, effects and nested handler replacement in one portable program. |
 | `maximal/adaptive_pipeline.flow` | Named fork records, placeholder pipelines, `choose`, enums, guarded matching and scoped observation in one dataflow. |
 | `maximal/evolving_effectful_system.flow` | Continuous dynamics, sampled control, nested flow topology, generated stepping, effects, handler replacement and classification in one executable system. |
+| `maximal/algebraic_core.flow` | Escaping affine closures, closure composition where a closure captures other closures, fold-map over spans, algebraic classification and an effectful observation shell around a pure higher-order core. |
 
-The maximal directory is intentionally plural. There is no honest “all features at once” file because Flow's current advanced surfaces have different host/backend boundaries. A Metal `@gpu` kernel, a Python-host-expanded declarative pipeline, a native pthread program and a portable core-only program are not the same compilation contract. The useful challenge is to combine everything that coherently belongs on one target, not to make a fake syntax trophy.
+The maximal directory is intentionally plural. There is no honest “all features at once” file because some advanced surfaces still have different host or target contracts. A Metal `@gpu` kernel and a native CPU program are not the same compilation problem. The useful challenge is to combine everything that coherently belongs on one target, then make portability claims executable where portability is promised.
+
+## Algebra before branch soup
+
+Flow can express ordinary imperative control flow, but that is not automatically the most revealing architecture. When behaviour itself is data, prefer first-class functions. When two transformations are one conceptual program, compose them. When a loop is really a fold, keep the loop local to the fold and pass the transformation and reduction policy as values. When a value is being classified, use matching. When the outside world changes, put that change in an effect handler rather than infecting the pure core with mode flags.
+
+`maximal/algebraic_core.flow` is the reference pressure test for this style. Its `compose` returns an escaping closure that owns two other first-class function values; `fold_map` contains the necessary iteration while the transformation pipeline remains algebraic; observation is selected by nested capability scopes rather than parameters. This is deliberately Haskell-esque in architecture without pretending Flow is Haskell or inventing syntax Flow does not have.
 
 ## Cross-language comparisons
 
@@ -56,7 +69,7 @@ The comparisons are not scored by token count. They ask whether missing lines we
 
 ## Do and don't
 
-`STYLE.md` is the opinionated half of the repository. It shows why ordinary mutable state should remain ordinary data, why environmental behaviour belongs in effects, why `span<mut T>` should communicate actual mutation, why `flow` should represent real evolution rather than replace every numerical loop, why sampling periods should not hide in counter arithmetic, why `connect` should expose topology, why cleanup should bind to scope, and why examples must not invent future Flow syntax.
+`STYLE.md` is the opinionated half of the repository. It shows why ordinary mutable state should remain ordinary data, why environmental behaviour belongs in effects, why higher-order policies should be represented as function values rather than switch ladders, why `span<mut T>` should communicate actual mutation, why `flow` should represent real evolution rather than replace every numerical loop, why sampling periods should not hide in counter arithmetic, why `connect` should expose topology, why cleanup should bind to scope, and why examples must not invent future Flow syntax.
 
 ## Performance policy
 
@@ -70,7 +83,7 @@ The benchmark harness is the source of truth. README prose may summarize generat
 
 ## What this repo is trying to prove
 
-Flow's syntax is not unique because it has a nicer `for` loop. It is unique when the same language can describe memory topology, scoped behaviour, continuous evolution, sampled state changes, hybrid events, declarative data movement and low-level execution without forcing the programmer to mentally translate the system through five different programming models.
+Flow's syntax is not unique because it has a nicer `for` loop. It is unique when the same language can describe memory topology, scoped behaviour, higher-order programs, continuous evolution, sampled state changes, hybrid events, declarative data movement and low-level execution without forcing the programmer to mentally translate the system through five different programming models.
 
 The best file in this repository should produce the reaction:
 
