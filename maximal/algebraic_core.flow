@@ -1,0 +1,122 @@
+# ALGEBRAIC CORE
+#
+# The deliberately functional end of Flow's current portable surface:
+# higher-order functions, escaping configuration closures, composition where
+# the returned closure captures other closures, fold-map over borrowed data,
+# algebraic classification, and effects kept at the observation shell.
+#
+# There are loops where iteration is the domain operation, but no imperative
+# decision tree in the core. Policy is represented by values and handlers.
+
+effect Observe {
+    value(x: i32) -> void,
+}
+
+extern {
+    function printf(fmt: string, val: i32) -> i32
+}
+
+capability VisibleWorld {
+    effect Observe,
+
+    function value(x: i32) -> void {
+        printf("value=%d\n", x)
+    },
+}
+
+capability QuietWorld {
+    effect Observe,
+
+    function value(x: i32) -> void {
+    },
+}
+
+function apply(f: (i32) -> i32, x: i32) -> i32 {
+    return f(x)
+}
+
+function compose(
+    outer: (i32) -> i32,
+    inner: (i32) -> i32
+) -> (i32) -> i32 {
+    # The escaping closure captures two first-class functions by value.
+    return |x: i32| -> i32 {
+        return outer(inner(x))
+    }
+}
+
+function affine(scale: i32, bias: i32) -> (i32) -> i32 {
+    return |x: i32| -> i32 {
+        return scale * x + bias
+    }
+}
+
+function sum_step() -> (i32, i32) -> i32 {
+    return |acc: i32, x: i32| -> i32 {
+        return acc + x
+    }
+}
+
+function fold_map(
+    values: span<i32>,
+    initial: i32,
+    transform: (i32) -> i32,
+    combine: (i32, i32) -> i32
+) -> i32 {
+    let mut acc: i32 = initial
+    let mut i: i32 = 0
+    while i < values.len {
+        acc = combine(acc, transform(values[i]))
+        i = i + 1
+    }
+    return acc
+}
+
+function band(value: i32) -> i32 {
+    match value {
+        0 => { return 0 }
+        x if x < 50 => { return 1 }
+        50 | 51 | 52 | 53 | 54 => { return 2 }
+        _ => { return 3 }
+    }
+}
+
+function evaluate(values: span<i32>, program: (i32) -> i32) -> i32 {
+    let total: i32 = fold_map(values, 0, program, sum_step())
+    Observe.value(total)
+    return band(total)
+}
+
+function main() -> i32 {
+    let values: array<i32, 4> = [1, 2, 3, 4]
+
+    # program(x) = 3 * (x + 2). The closure returned by compose owns two
+    # other closures, so this is a real higher-order composition value rather
+    # than syntactic pipeline decoration.
+    let shift: (i32) -> i32 = affine(1, 2)
+    let scale: (i32) -> i32 = affine(3, 0)
+    let program: (i32) -> i32 = compose(scale, shift)
+
+    let mut visible: i32 = 0
+    let mut quiet: i32 = 0
+
+    handle Observe with VisibleWorld {
+        visible = evaluate(values, program)
+
+        handle Observe with QuietWorld {
+            quiet = evaluate(values, program)
+        }
+    }
+
+    # [1,2,3,4] -> [9,12,15,18] -> 54 -> band 2.
+    # Compare worlds algebraically rather than building a flag ladder.
+    match visible - quiet {
+        0 => {
+            match visible {
+                2 => { return 0 }
+                _ => { return 2 }
+            }
+        }
+        _ => { return 1 }
+    }
+}

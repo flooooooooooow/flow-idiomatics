@@ -1,0 +1,8 @@
+showcases/memory/borrowed_signal.flow
+showcases/effects/packet_admission_worlds.flow
+maximal/edge_of_wtf.flow
+maximal/adaptive_pipeline.flow
+showcases/evolution/closed_loop_motor.flow
+showcases/evolution/hybrid_bounce.flow
+maximal/evolving_effectful_system.flow
+maximal/algebraic_core.flow

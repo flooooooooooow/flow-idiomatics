@@ -40,6 +40,115 @@ function place_order(sku: i32, qty: i32) -> i32 {
 
 The data needed to place the order remains explicit. The implementation of logging or inventory access belongs to the surrounding world.
 
+## Higher-order policy
+
+### Don't: encode a transformation program as mode flags and branch ladders
+
+```flow
+function transform(x: i32, mode: i32, scale: i32, bias: i32) -> i32 {
+    if mode == 0 {
+        return x
+    }
+    if mode == 1 {
+        return scale * x
+    }
+    return scale * x + bias
+}
+```
+
+The caller knows the behaviour it wants, but the callee is forced to rediscover that choice on every call.
+
+### Do: make behaviour a first-class value
+
+```flow
+function affine(scale: i32, bias: i32) -> (i32) -> i32 {
+    return |x: i32| -> i32 {
+        return scale * x + bias
+    }
+}
+
+function compose(
+    outer: (i32) -> i32,
+    inner: (i32) -> i32,
+) -> (i32) -> i32 {
+    return |x: i32| -> i32 {
+        return outer(inner(x))
+    }
+}
+```
+
+An escaping closure is configuration plus behaviour in one typed value. A closure may own other function values when composition is the actual domain structure. Prefer that to rebuilding a callback graph with tags and switches.
+
+## Pure core, effectful shell
+
+### Don't: mix observation policy into every transformation
+
+```flow
+function score(x: i32, verbose: bool) -> i32 {
+    let y: i32 = x * 3
+    if verbose {
+        print(y)
+    }
+    return y
+}
+```
+
+### Do: keep the transformation pure and move the world to the boundary
+
+```flow
+function score(x: i32) -> i32 {
+    return x * 3
+}
+
+function evaluate(x: i32) -> i32 {
+    let y: i32 = score(x)
+    Observe.value(y)
+    return y
+}
+```
+
+A handler can then select visible, silent, deterministic or test observation without changing the algebra of the core.
+
+## Folds and iteration
+
+Functional architecture does not mean pretending iteration vanished. A fold over contiguous data still needs to visit the data.
+
+### Don't: spread traversal, transformation and policy across one giant loop
+
+```flow
+let mut total: i32 = 0
+let mut i: i32 = 0
+while i < values.len {
+    if mode == 1 {
+        total = total + values[i] * 3
+    } else {
+        total = total + values[i] + 2
+    }
+    i = i + 1
+}
+```
+
+### Do: localize mutation to the fold and pass the algebra as values
+
+```flow
+function fold_map(
+    values: span<i32>,
+    initial: i32,
+    transform: (i32) -> i32,
+    combine: (i32, i32) -> i32,
+) -> i32 {
+    let mut acc: i32 = initial
+    let mut i: i32 = 0
+    while i < values.len {
+        acc = combine(acc, transform(values[i]))
+        i = i + 1
+    }
+    return acc
+}
+```
+
+The loop is not a style failure. It is the implementation of a fold. The important part is that traversal mechanics no longer own transformation policy.
+
 ## Owned state
 
 ### Don't: turn ordinary mutable data into an effect just because effects exist
@@ -272,10 +381,16 @@ handle Log with SilentLogger {
 
 The outer handler is restored automatically when the scope ends.
 
+## Portability is executable
+
+If a flagship is listed in `portable-programs.txt`, it must execute through the C backend and independently produce MLIR accepted by `mlir-opt`. “The generator returned success” is not enough, and a backend gap is not a reason to rewrite the example into a less expressive architecture.
+
+A genuinely target-specific feature should be labelled target-specific. A generally portable language feature should get backend parity.
+
 ## Don't invent future Flow
 
 Flow deliberately does not currently have general `async` / `await` syntax. Some advanced surfaces are target- or host-specific. A beautiful example that does not compile is documentation debt.
 
-When a feature is Experimental, say so. When an example requires the Python-hosted compiler, say so. When MLIR lacks parity, say so. When a benchmark loses, keep the number.
+When a feature is Experimental, say so. When an example requires the Python-hosted compiler, say so. When a backend lacks parity, either label the boundary honestly or fix the backend. When a benchmark loses, keep the number.
 
 That discipline is part of the idiomatics.
