@@ -1,0 +1,74 @@
+# A deliberately allocation-free signal pass.
+#
+# Fixed storage owns the samples. Every processing function receives a borrowed
+# view. Slices narrow the view without copying. Mutation is visible in the type.
+#
+# Expected target: C backend.
+
+function energy(samples: span<f32>) -> f32 {
+    let mut total: f32 = 0.0
+    let mut i: i32 = 0
+    while i < samples.len {
+        total = total + samples[i] * samples[i]
+        i = i + 1
+    }
+    return total
+}
+
+function dc_block(samples: span<mut f32>, mean: f32) -> void {
+    let mut i: i32 = 0
+    while i < samples.len {
+        samples[i] = samples[i] - mean
+        i = i + 1
+    }
+}
+
+function peak4(samples: span<f32, 4>) -> f32 {
+    let mut p: f32 = samples[0]
+    let mut i: i32 = 1
+    while i < 4 {
+        let x: f32 = if samples[i] >= 0.0 { samples[i] } else { -samples[i] }
+        if x > p {
+            p = x
+        }
+        i = i + 1
+    }
+    return p
+}
+
+function classify_peak(peak: i32) -> i32 {
+    match peak {
+        0 => { return 0 }
+        1 | 2 => { return 1 }
+        x if x < 8 => { return 2 }
+        _ => { return 3 }
+    }
+}
+
+function main() -> i32 {
+    let mut frame: array<f32, 8> = [1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0]
+
+    # whole-frame borrowed read
+    let before: f32 = energy(frame)
+
+    # zero-copy mutable borrow of only the first half
+    dc_block(frame[0..4], 2.5)
+
+    # static-extent borrow: exactly four samples or the call is invalid
+    let p: f32 = peak4(frame[0..4])
+    let class: i32 = classify_peak(p as i32)
+
+    # second half was never copied and never touched
+    let tail: f32 = energy(frame[4..8])
+
+    if before != 60.0 {
+        return 1
+    }
+    if tail != 30.0 {
+        return 2
+    }
+    if class != 1 {
+        return 3
+    }
+    return 0
+}
