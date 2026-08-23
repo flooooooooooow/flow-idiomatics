@@ -1,0 +1,110 @@
+# EVOLVING + EFFECTFUL SYSTEM
+#
+# Continuous state, sampled discrete state, generated model APIs, nested flow
+# composition, feedback wiring, explicit address-of, algebraic effects, dynamic
+# handler replacement and pattern matching coexist here.
+#
+# Expected host/backend: Python-hosted compiler -> C.
+
+extern {
+    function printf(fmt: string, ...) -> i32
+    function fabs(x: f64) -> f64
+}
+
+effect Telemetry {
+    sample(step: i32, speed: f64, command: f64) -> void,
+}
+
+capability ConsoleTelemetry {
+    effect Telemetry,
+
+    function sample(step: i32, speed: f64, command: f64) -> void {
+        printf("step=%d speed=%.6f command=%.6f\n", step, speed, command)
+    },
+}
+
+capability SilentTelemetry {
+    effect Telemetry,
+
+    function sample(step: i32, speed: f64, command: f64) -> void {
+    },
+}
+
+flow Plant {
+    state speed: f64 = 0.0
+    input drive: f64
+    output measured: f64 = speed
+    param damping: f64 = 0.5
+
+    speed evolves as drive - damping * speed
+}
+
+flow SampledController {
+    state command: f64 = 0.0
+    input target: f64
+    input feedback: f64
+    output drive: f64 = command
+    param kp: f64 = 2.0
+
+    every 1 ms {
+        command becomes kp * (target - feedback)
+    }
+}
+
+flow System {
+    plant: Plant
+    controller: SampledController
+
+    connect {
+        controller.drive -> plant.drive
+        plant.measured -> controller.feedback
+    }
+}
+
+function error_class(error_milli: i32) -> i32 {
+    match error_milli {
+        0 => { return 0 }
+        1 | 2 | 3 => { return 1 }
+        e if e < 50 => { return 2 }
+        _ => { return 3 }
+    }
+}
+
+function run(system: ptr<System>, steps: i32, dt: f64) -> void {
+    for k in 0 to steps {
+        System_step(system, dt)
+
+        if k % 1000 == 0 {
+            Telemetry.sample(k, system.plant.speed, system.controller.command)
+        }
+    }
+}
+
+function main() -> i32 {
+    let dt: f64 = 0.001
+    let target: f64 = 1.0
+    let mut system: System = System_new()
+    system.controller.target = target
+
+    handle Telemetry with ConsoleTelemetry {
+        run(&system, 2500, dt)
+
+        # The model keeps evolving, but observation is replaced for one scope.
+        handle Telemetry with SilentTelemetry {
+            run(&system, 2500, dt)
+        }
+
+        Telemetry.sample(5000, system.plant.speed, system.controller.command)
+    }
+
+    let error: f64 = fabs(system.plant.speed - target)
+    let class: i32 = error_class((error * 1000.0) as i32)
+
+    if error >= 0.05 {
+        return 1
+    }
+    if class > 2 {
+        return 2
+    }
+    return 0
+}
