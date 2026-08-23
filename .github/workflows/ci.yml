@@ -69,11 +69,11 @@ jobs:
       - name: Checkout idiomatics
         uses: actions/checkout@v7
 
-      - name: Checkout Flow MLIR parity branch
+      - name: Checkout Flow MLIR parity commit
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: fix/mlir-or-patterns
+          ref: c88f04794839e3893e8336376490abe0476632e3
           path: .flow-toolchain
 
       - name: Set up Python
