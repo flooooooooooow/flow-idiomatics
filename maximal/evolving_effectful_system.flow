@@ -70,16 +70,6 @@ function error_class(error_milli: i32) -> i32 {
     }
 }
 
-function run(system: ptr<System>, steps: i32, dt: f64) -> void {
-    for k in 0 to steps {
-        System_step(system, dt)
-
-        if k % 1000 == 0 {
-            Telemetry.sample(k, system.plant.speed, system.controller.command)
-        }
-    }
-}
-
 function main() -> i32 {
     let dt: f64 = 0.001
     let target: f64 = 1.0
@@ -87,11 +77,21 @@ function main() -> i32 {
     system.controller.target = target
 
     handle Telemetry with ConsoleTelemetry {
-        run(&system, 2500, dt)
+        for k in 0 to 2500 {
+            System_step(&system, dt)
+            if k % 1000 == 0 {
+                Telemetry.sample(k, system.plant.speed, system.controller.command)
+            }
+        }
 
         # The model keeps evolving, but observation is replaced for one scope.
         handle Telemetry with SilentTelemetry {
-            run(&system, 2500, dt)
+            for k in 2500 to 5000 {
+                System_step(&system, dt)
+                if k % 1000 == 0 {
+                    Telemetry.sample(k, system.plant.speed, system.controller.command)
+                }
+            }
         }
 
         Telemetry.sample(5000, system.plant.speed, system.controller.command)
