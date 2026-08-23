@@ -45,9 +45,10 @@ flow SampledController {
     input feedback: f64
     output drive: f64 = command
     param kp: f64 = 2.0
+    param plant_damping: f64 = 0.5
 
     every 1 ms {
-        command becomes kp * (target - feedback)
+        command becomes plant_damping * target + kp * (target - feedback)
     }
 }
 
