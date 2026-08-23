@@ -140,7 +140,7 @@ capability ConsoleAudit {
 function main() -> i32 {
     let mut normal: i32 = 0
     let mut panic: i32 = 0
-    let mut test: i32 = 0
+    let mut fixture_result: i32 = 0
 
     handle Clock with WallClock {
         handle Log with TimestampedLog {
@@ -164,7 +164,7 @@ function main() -> i32 {
     handle Clock with FrozenClock {
         handle Log with SilentLog {
             handle AdmissionPolicy, Audit with DeterministicTestWorld {
-                test = admit(9, 4096, 1, 99)
+                fixture_result = admit(9, 4096, 1, 99)
             }
         }
     }
@@ -175,7 +175,7 @@ function main() -> i32 {
     if panic != 0 {
         return 2
     }
-    if test != 1 {
+    if fixture_result != 1 {
         return 3
     }
     return 0
