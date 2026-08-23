@@ -1,0 +1,5 @@
+.flow-toolchain/
+benchmarks/.build/
+benchmarks/benchmark-results.md
+__pycache__/
+*.pyc
