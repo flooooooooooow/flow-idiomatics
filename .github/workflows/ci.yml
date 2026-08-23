@@ -60,7 +60,7 @@ jobs:
           done
 
   mlir-lowering:
-    name: MLIR backend / lower
+    name: MLIR backend / lower + verify
     runs-on: ubuntu-latest
     env:
       LLVM_PATH: /usr/lib/llvm-18/bin
@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: flooooooooooow/flow
-          ref: c88f04794839e3893e8336376490abe0476632e3
+          ref: 6151c45768be3de653a48aaa37e671ffe9171e28
           path: .flow-toolchain
 
       - name: Set up Python
@@ -93,7 +93,7 @@ jobs:
           test -x "$LLVM_PATH/mlir-opt"
           test -x "$LLVM_PATH/mlir-translate"
 
-      - name: Lower every portable showcase to MLIR
+      - name: Lower and verify every portable showcase as MLIR
         shell: bash
         run: |
           set -euo pipefail
@@ -112,8 +112,11 @@ jobs:
           for program in "${programs[@]}"; do
             base="$(basename "$program" .flow)"
             log=".artifacts/mlir/${base}.log"
-            echo "::group::MLIR/lower $program"
+            mlir=".flow-toolchain/build/${base}.mlir"
+            echo "::group::MLIR/lower+verify $program"
             FLOW_HOST=python FLOW_CPU_BACKEND=mlir .flow-toolchain/flow mlir "$program" 2>&1 | tee "$log"
+            test -s "$mlir"
+            "$LLVM_PATH/mlir-opt" "$mlir" -o /dev/null
             echo "::endgroup::"
           done
 
