@@ -36,7 +36,7 @@ def run_checked(command: list[str], *, cwd: Path | None = None, env: dict[str, s
     )
 
 
-def compile_targets(flow_root: Path, build: Path) -> list[Target]:
+def compile_targets(flow_root: Path, build: Path) -> tuple[list[Target], list[tuple[str, str]]]:
     build.mkdir(parents=True, exist_ok=True)
 
     flow_driver = flow_root / "flow"
@@ -59,25 +59,31 @@ def compile_targets(flow_root: Path, build: Path) -> list[Target]:
     run_checked([cc, "-O3", "-std=c11", "-D_POSIX_C_SOURCE=200809L", str(generated_c), "-lm", "-o", str(flow_binary)])
 
     targets = [Target("Flow/C", [str(flow_binary)])]
+    skipped: list[tuple[str, str]] = []
 
     if cxx is not None:
         try:
             cpp_binary = build / "cpp-kernel"
-            run_checked([cxx, "-O3", "-std=c++20", str(KERNEL / "kernel.cpp"), "-o", str(cpp_binary)])
+            # Use libstdc++ explicitly since clang may not find libc++ stdlib
+            run_checked([cxx, "-O3", "-std=c++20", "-stdlib=libstdc++", str(KERNEL / "kernel.cpp"), "-o", str(cpp_binary)])
             targets.append(Target("C++20", [str(cpp_binary)]))
-        except subprocess.CalledProcessError:
-            pass  # C++ compiler available but compilation failed (e.g., missing stdlib)
+        except subprocess.CalledProcessError as e:
+            reason = f"C++ compilation failed: {e.stderr if hasattr(e, 'stderr') else 'unknown error'}"
+            skipped.append(("C++20", reason))
+            print(f"::warning::Skipping C++20 benchmark: compilation failed", file=sys.stderr)
 
     if rustc is not None:
         try:
             rust_binary = build / "rust-kernel"
             run_checked([rustc, "-C", "opt-level=3", str(KERNEL / "kernel.rs"), "-o", str(rust_binary)])
             targets.append(Target("Rust", [str(rust_binary)]))
-        except subprocess.CalledProcessError:
-            pass  # Rust compiler available but compilation failed
+        except subprocess.CalledProcessError as e:
+            reason = f"Rust compilation failed: {e.stderr if hasattr(e, 'stderr') else 'unknown error'}"
+            skipped.append(("Rust", reason))
+            print(f"::warning::Skipping Rust benchmark: compilation failed", file=sys.stderr)
 
     targets.append(Target("CPython", [sys.executable, str(KERNEL / "kernel.py")]))
-    return targets
+    return targets, skipped
 
 
 def parse_result(output: str) -> float:
@@ -128,6 +134,7 @@ def render_report(
     samples: int,
     medians: dict[str, float],
     values: dict[str, float],
+    skipped: list[tuple[str, str]],
 ) -> str:
     flow_ms = medians["Flow/C"]
     lines = [
@@ -153,9 +160,21 @@ def render_report(
             "Lower time is better. `Relative to Flow` is elapsed-time ratio, so values above `1.0x` are slower than Flow for this workload and values below `1.0x` are faster.",
             "",
             "This benchmark measures generated native execution plus process startup. It does not measure Flow compile time. No `-ffast-math`, target-specific ISA flag or semantics-changing optimisation is enabled.",
-            "",
         ]
     )
+    
+    if skipped:
+        lines.extend(
+            [
+                "",
+                "## Skipped implementations",
+                "",
+            ]
+        )
+        for name, reason in skipped:
+            lines.append(f"- **{name}**: {reason}")
+    
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -170,7 +189,7 @@ def main() -> int:
         raise SystemExit("--samples must be at least 1")
 
     build = ROOT / ".build"
-    targets = compile_targets(args.flow_root.resolve(), build)
+    targets, skipped = compile_targets(args.flow_root.resolve(), build)
 
     medians: dict[str, float] = {}
     values: dict[str, float] = {}
@@ -181,7 +200,7 @@ def main() -> int:
         values[target.name] = value
 
     validate(values)
-    report = render_report(args.flow_root.resolve(), args.samples, medians, values)
+    report = render_report(args.flow_root.resolve(), args.samples, medians, values, skipped)
     args.output.write_text(report, encoding="utf-8")
     print(report)
     return 0
