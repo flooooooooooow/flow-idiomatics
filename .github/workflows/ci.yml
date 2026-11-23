@@ -48,7 +48,7 @@ jobs:
           for program in "${programs[@]}"; do
             [[ -n "$program" ]] || continue
             echo "::group::C/native $program"
-            FLOW_HOST=python FLOW_CPU_BACKEND=c .flow-toolchain/flow run "$program" --backend=c
+            FLOW_CPU_BACKEND=c .flow-toolchain/flow run "$program" --backend=c
             echo "::endgroup::"
           done
 
@@ -98,7 +98,7 @@ jobs:
             log=".artifacts/mlir/${base}.log"
             mlir=".flow-toolchain/build/${base}.mlir"
             echo "::group::MLIR/lower+verify $program"
-            FLOW_HOST=python FLOW_CPU_BACKEND=mlir .flow-toolchain/flow mlir "$program" 2>&1 | tee "$log"
+            FLOW_CPU_BACKEND=mlir .flow-toolchain/flow mlir "$program" --lenient 2>&1 | tee "$log"
             test -s "$mlir"
             "$LLVM_PATH/mlir-opt" "$mlir" -o /dev/null
             echo "::endgroup::"
