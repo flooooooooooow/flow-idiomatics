@@ -1,0 +1,32 @@
+# Minimal reproduction of flowc C generation bug
+# Bug: When composing closures that capture scalars with closures that capture
+# function values, flowc generates incorrect C code treating captured i32 as
+# function pointer type fn_i32__i32
+
+function compose(
+    outer: (i32) -> i32,
+    inner: (i32) -> i32
+) -> (i32) -> i32 {
+    return |x: i32| -> i32 {
+        return outer(inner(x))
+    }
+}
+
+function affine(scale: i32, bias: i32) -> (i32) -> i32 {
+    return |x: i32| -> i32 {
+        return scale * x + bias
+    }
+}
+
+function main() -> i32 {
+    let shift: (i32) -> i32 = affine(1, 2)    # x + 2
+    let scale: (i32) -> i32 = affine(3, 0)    # 3 * x
+    let program: (i32) -> i32 = compose(scale, shift)  # 3 * (x + 2)
+    
+    let result: i32 = program(4)
+    # Expected: 3 * (4 + 2) = 3 * 6 = 18
+    if result == 18 {
+        return 0
+    }
+    return 1
+}
