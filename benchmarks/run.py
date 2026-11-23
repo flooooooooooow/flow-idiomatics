@@ -43,13 +43,9 @@ def compile_targets(flow_root: Path, build: Path) -> list[Target]:
     if not flow_driver.exists():
         raise SystemExit(f"Flow driver not found: {flow_driver}")
 
-    env = os.environ.copy()
-    env["FLOW_HOST"] = "python"
-
     generated_c = build / "kernel.flow.c"
     run_checked(
-        [str(flow_driver), "transpile", str(KERNEL / "kernel.flow"), "--c", "-o", str(generated_c)],
-        env=env,
+        [str(flow_driver), "tool", "compiler/scripts/flowc_emit.flow", str(KERNEL / "kernel.flow"), str(generated_c)],
     )
 
     cc = shutil.which("cc")
@@ -60,19 +56,25 @@ def compile_targets(flow_root: Path, build: Path) -> list[Target]:
         raise SystemExit("A C compiler is required to benchmark Flow's C backend")
 
     flow_binary = build / "flow-kernel"
-    run_checked([cc, "-O3", "-std=c11", str(generated_c), "-lm", "-o", str(flow_binary)])
+    run_checked([cc, "-O3", "-std=c11", "-D_POSIX_C_SOURCE=200809L", str(generated_c), "-lm", "-o", str(flow_binary)])
 
     targets = [Target("Flow/C", [str(flow_binary)])]
 
     if cxx is not None:
-        cpp_binary = build / "cpp-kernel"
-        run_checked([cxx, "-O3", "-std=c++20", str(KERNEL / "kernel.cpp"), "-o", str(cpp_binary)])
-        targets.append(Target("C++20", [str(cpp_binary)]))
+        try:
+            cpp_binary = build / "cpp-kernel"
+            run_checked([cxx, "-O3", "-std=c++20", str(KERNEL / "kernel.cpp"), "-o", str(cpp_binary)])
+            targets.append(Target("C++20", [str(cpp_binary)]))
+        except subprocess.CalledProcessError:
+            pass  # C++ compiler available but compilation failed (e.g., missing stdlib)
 
     if rustc is not None:
-        rust_binary = build / "rust-kernel"
-        run_checked([rustc, "-C", "opt-level=3", str(KERNEL / "kernel.rs"), "-o", str(rust_binary)])
-        targets.append(Target("Rust", [str(rust_binary)]))
+        try:
+            rust_binary = build / "rust-kernel"
+            run_checked([rustc, "-C", "opt-level=3", str(KERNEL / "kernel.rs"), "-o", str(rust_binary)])
+            targets.append(Target("Rust", [str(rust_binary)]))
+        except subprocess.CalledProcessError:
+            pass  # Rust compiler available but compilation failed
 
     targets.append(Target("CPython", [sys.executable, str(KERNEL / "kernel.py")]))
     return targets
